@@ -1,0 +1,866 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidMemberList(listVal) {
+      return listVal is list && listVal.size() >= 1 && listVal.size() <= 30 && listVal[0] is string;
+    }
+
+    // --- Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+             (!('bikeModel' in data) || (data.bikeModel is string && data.bikeModel.size() <= 80)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 30)) &&
+             (!('activePackId' in data) || (data.activePackId is string && data.activePackId.size() <= 128)) &&
+             (!('totalDistanceKm' in data) || (data.totalDistanceKm is number && data.totalDistanceKm >= 0)) &&
+             (!('totalElevationM' in data) || (data.totalElevationM is number && data.totalElevationM >= 0)) &&
+             (!('ridesCompleted' in data) || (data.ridesCompleted is int && data.ridesCompleted >= 0)) &&
+             (!('earnedMilestones' in data) || (data.earnedMilestones is list && data.earnedMilestones.size() <= 20 && (data.earnedMilestones.size() == 0 || data.earnedMilestones[0] is string))) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidRideTrip(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             (!('packId' in data) || (data.packId is string && data.packId.size() <= 128)) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 20000 &&
+             (!('elevationGainM' in data) || (data.elevationGainM is number && data.elevationGainM >= 0)) &&
+             (!('elevationChangeNetM' in data) || data.elevationChangeNetM is number) &&
+             (!('durationMin' in data) || (data.durationMin is int && data.durationMin >= 0)) &&
+             (!('avgSpeedKmh' in data) || (data.avgSpeedKmh is number && data.avgSpeedKmh >= 0)) &&
+             (!('startLat' in data) || data.startLat is number) &&
+             (!('startLng' in data) || data.startLng is number) &&
+             (!('endLat' in data) || data.endLat is number) &&
+             (!('endLng' in data) || data.endLng is number) &&
+             (!('weatherSummary' in data) || (data.weatherSummary is string && data.weatherSummary.size() <= 300)) &&
+             (!('weatherSeverity' in data) || data.weatherSeverity in ['CLEAR', 'ADVISORY', 'WARNING']) &&
+             (!('maxWindGustKmh' in data) || (data.maxWindGustKmh is number && data.maxWindGustKmh >= 0)) &&
+             (!('batteryEfficiencyUsed' in data) || data.batteryEfficiencyUsed is bool) &&
+             (!('batteryPercentUsed' in data) || (data.batteryPercentUsed is int && data.batteryPercentUsed >= 0 && data.batteryPercentUsed <= 100)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidRidePack(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.inviteCode is string && data.inviteCode.size() >= 6 && data.inviteCode.size() <= 12 &&
+             data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             isValidMemberList(data.memberUids) &&
+             data.encryptionSalt is string && data.encryptionSalt.size() >= 8 && data.encryptionSalt.size() <= 128 &&
+             (!('separationThresholdKm' in data) || (data.separationThresholdKm is number && data.separationThresholdKm >= 0.1 && data.separationThresholdKm <= 100)) &&
+             (!('activeRouteName' in data) || (data.activeRouteName is string && data.activeRouteName.size() <= 120)) &&
+             (!('activeRoutePolyline' in data) || (data.activeRoutePolyline is string && data.activeRoutePolyline.size() <= 20000)) &&
+             (!('activeRouteDistanceKm' in data) || (data.activeRouteDistanceKm is number && data.activeRouteDistanceKm >= 0)) &&
+             (!('activeRouteDurationMin' in data) || (data.activeRouteDurationMin is int && data.activeRouteDurationMin >= 0)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPackInvite(data) {
+      return data.packId is string && isValidId(data.packId) &&
+             data.packName is string && data.packName.size() >= 1 && data.packName.size() <= 80 &&
+             data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.encryptionSalt is string && data.encryptionSalt.size() >= 8 && data.encryptionSalt.size() <= 128 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidPackMemberTelemetry(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+             (!('bikeModel' in data) || (data.bikeModel is string && data.bikeModel.size() <= 80)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 30)) &&
+             data.encryptedTelemetry is string && data.encryptedTelemetry.size() >= 1 && data.encryptedTelemetry.size() <= 4000 &&
+             data.batteryPercent is int && data.batteryPercent >= 0 && data.batteryPercent <= 100 &&
+             data.isCharging is bool &&
+             (!('totalDistanceKm' in data) || (data.totalDistanceKm is number && data.totalDistanceKm >= 0)) &&
+             (!('elevationClimbedM' in data) || (data.elevationClimbedM is number && data.elevationClimbedM >= 0)) &&
+             data.isOnline is bool &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPackMessage(data) {
+      return data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             (!('recipientId' in data) || (data.recipientId is string && data.recipientId.size() <= 128)) &&
+             data.encryptedBody is string && data.encryptedBody.size() >= 1 && data.encryptedBody.size() <= 4000 &&
+             data.messageType in ['chat', 'alert', 'ping', 'voice'] &&
+             (!('encryptedAudio' in data) || (data.encryptedAudio is string && data.encryptedAudio.size() <= 65000)) &&
+             (!('audioCodec' in data) || (data.audioCodec in ['', 'AMR_NB', 'AAC_LOW'])) &&
+             (!('audioDurationMs' in data) || (data.audioDurationMs is int && data.audioDurationMs >= 0 && data.audioDurationMs <= 30000)) &&
+             (!('audioSizeBytes' in data) || (data.audioSizeBytes is int && data.audioSizeBytes >= 0 && data.audioSizeBytes <= 48000)) &&
+             (!('audioPeaks' in data) || (data.audioPeaks is string && data.audioPeaks.size() <= 120)) &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidUrgentPing(data) {
+      return data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             data.targetUserId is string && data.targetUserId.size() >= 1 && data.targetUserId.size() <= 128 &&
+             data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.alertType in ['RING_URGENT', 'WEATHER_HAZARD', 'LOW_BATTERY', 'SEPARATION', 'EMERGENCY_SOS'] &&
+             (!('encryptedNote' in data) || (data.encryptedNote is string && data.encryptedNote.size() <= 2000)) &&
+             data.acknowledged is bool &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMapChallenge(data) {
+      return data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 300)) &&
+             data.challengeType in ['ELEVATION', 'CONVOY', 'SPRINT', 'CHECKPOINT'] &&
+             data.targetValue is number && data.targetValue > 0 &&
+             data.currentValue is number && data.currentValue >= 0 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             (!('checkpointLat' in data) || data.checkpointLat is number) &&
+             (!('checkpointLng' in data) || data.checkpointLng is number) &&
+             data.status in ['active', 'completed'] &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPackMapPin(data) {
+      return data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             data.pinType in ['GAS_STOP', 'REST_BREAK', 'HAZARD_WARNING', 'EMERGENCY_SOS'] &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 300)) &&
+             data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+             data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+             data.severity in ['INFO', 'CAUTION', 'DANGER'] &&
+             (!('confirmedByUids' in data) || (data.confirmedByUids is list && data.confirmedByUids.size() <= 30)) &&
+             data.status in ['active', 'resolved'] &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPackGalleryPhoto(data) {
+      return data.packId is string && data.packId.size() >= 1 && data.packId.size() <= 128 &&
+             data.uploaderId is string && data.uploaderId.size() >= 1 && data.uploaderId.size() <= 128 &&
+             data.uploaderName is string && data.uploaderName.size() >= 1 && data.uploaderName.size() <= 60 &&
+             (!('caption' in data) || (data.caption is string && data.caption.size() <= 200)) &&
+             (!('locationLabel' in data) || (data.locationLabel is string && data.locationLabel.size() <= 100)) &&
+             data.imageDataBase64 is string && data.imageDataBase64.size() >= 16 && data.imageDataBase64.size() <= 350000 &&
+             (!('lat' in data) || data.lat is number) &&
+             (!('lng' in data) || data.lng is number) &&
+             isValidMemberList(data.memberUids) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidPassportStamp(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.locationId is string && data.locationId.size() >= 1 && data.locationId.size() <= 128 &&
+             data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 100 &&
+             data.stampCode is string && data.stampCode.size() >= 1 && data.stampCode.size() <= 24 &&
+             (!('brewNote' in data) || (data.brewNote is string && data.brewNote.size() <= 200)) &&
+             data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+             data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+             data.verifiedGps is bool &&
+             isValidTimestamp(data.stampedAt);
+    }
+
+    function isValidBikerEvent(data) {
+      return (!('packId' in data) || (data.packId is string && data.packId.size() <= 128)) &&
+             data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 300)) &&
+             data.eventType in ['BIKER_BREW', 'BIKE_NIGHT', 'RIDE_OUT', 'SCENIC_MEET'] &&
+             (!('locationId' in data) || (data.locationId is string && data.locationId.size() <= 128)) &&
+             data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 100 &&
+             (!('brewSpecialty' in data) || (data.brewSpecialty is string && data.brewSpecialty.size() <= 120)) &&
+             data.scheduledLabel is string && data.scheduledLabel.size() >= 1 && data.scheduledLabel.size() <= 80 &&
+             data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+             data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+             (!('attendeeUids' in data) || (data.attendeeUids is list && data.attendeeUids.size() <= 30 && (data.attendeeUids.size() == 0 || data.attendeeUids[0] is string))) &&
+             (!('memberUids' in data) || (data.memberUids is list && data.memberUids.size() <= 30 && (data.memberUids.size() == 0 || data.memberUids[0] is string))) &&
+             (!('isPassportEvent' in data) || data.isPassportEvent is bool) &&
+             data.status in ['upcoming', 'completed'] &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidGarageBike(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.makeModel is string && data.makeModel.size() >= 1 && data.makeModel.size() <= 80 &&
+             data.year is int && data.year >= 1950 && data.year <= 2035 &&
+             data.currentOdometerKm is number && data.currentOdometerKm >= 0 && data.currentOdometerKm <= 1000000 &&
+             (!('engineCc' in data) || (data.engineCc is int && data.engineCc >= 49 && data.engineCc <= 3000)) &&
+             (!('tirePsiFront' in data) || (data.tirePsiFront is int && data.tirePsiFront >= 10 && data.tirePsiFront <= 80)) &&
+             (!('tirePsiRear' in data) || (data.tirePsiRear is int && data.tirePsiRear >= 10 && data.tirePsiRear <= 80)) &&
+             data.isPrimary is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMaintenanceItem(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.bikeId is string && data.bikeId.size() >= 1 && data.bikeId.size() <= 128 &&
+             data.bikeName is string && data.bikeName.size() >= 1 && data.bikeName.size() <= 80 &&
+             data.taskType in ['OIL_CHANGE', 'CHAIN_ADJUST', 'BRAKE_PADS', 'TIRES', 'VALVE_CHECK', 'AIR_FILTER', 'CUSTOM'] &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+             data.intervalKm is number && data.intervalKm >= 50 && data.intervalKm <= 100000 &&
+             data.lastServiceOdometerKm is number && data.lastServiceOdometerKm >= 0 && data.lastServiceOdometerKm <= 1000000 &&
+             data.nextDueOdometerKm is number && data.nextDueOdometerKm >= 0 && data.nextDueOdometerKm <= 1100000 &&
+             data.enabled is bool &&
+             (!('lastServicedAtMs' in data) || (data.lastServicedAtMs is int && data.lastServicedAtMs >= 0)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidServiceLog(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.bikeId is string && data.bikeId.size() >= 1 && data.bikeId.size() <= 128 &&
+             data.bikeName is string && data.bikeName.size() >= 1 && data.bikeName.size() <= 80 &&
+             data.taskType in ['OIL_CHANGE', 'CHAIN_ADJUST', 'BRAKE_PADS', 'TIRES', 'VALVE_CHECK', 'AIR_FILTER', 'CUSTOM'] &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.odometerKm is number && data.odometerKm >= 0 && data.odometerKm <= 1000000 &&
+             (!('costAmount' in data) || (data.costAmount is number && data.costAmount >= 0 && data.costAmount <= 100000)) &&
+             (!('shopOrDiy' in data) || (data.shopOrDiy is string && data.shopOrDiy.size() <= 80)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+             data.performedAtMs is int && data.performedAtMs > 0 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'photoUrl', 'bikeModel', 'phoneNumber',
+                         'activePackId', 'totalDistanceKm', 'totalElevationM', 'ridesCompleted',
+                         'earnedMilestones', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'photoUrl', 'bikeModel', 'phoneNumber', 'activePackId',
+                         'totalDistanceKm', 'totalElevationM', 'ridesCompleted', 'earnedMilestones', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      match /trips/{tripId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(tripId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(tripId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'title', 'distanceKm', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'packId', 'title', 'distanceKm', 'elevationGainM', 'elevationChangeNetM',
+                           'durationMin', 'avgSpeedKmh', 'startLat', 'startLng', 'endLat', 'endLng',
+                           'weatherSummary', 'weatherSeverity', 'maxWindGustKmh',
+                           'batteryEfficiencyUsed', 'batteryPercentUsed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidRideTrip(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(tripId) &&
+                         request.auth.uid == userId &&
+                         isValidRideTrip(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'distanceKm', 'elevationGainM', 'elevationChangeNetM',
+                           'durationMin', 'avgSpeedKmh', 'weatherSummary', 'weatherSeverity',
+                           'maxWindGustKmh', 'batteryEfficiencyUsed', 'batteryPercentUsed', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(tripId) && request.auth.uid == userId;
+      }
+
+      match /passport_stamps/{stampId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(stampId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(stampId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'locationId', 'locationName', 'stampCode', 'lat', 'lng', 'verifiedGps', 'stampedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'locationId', 'locationName', 'stampCode', 'brewNote',
+                           'lat', 'lng', 'verifiedGps', 'stampedAt'
+                         ]) &&
+                         isValidPassportStamp(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(stampId) &&
+                         request.auth.uid == userId &&
+                         isValidPassportStamp(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().locationId == existing().locationId &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['brewNote', 'verifiedGps', 'stampedAt']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(stampId) && request.auth.uid == userId;
+      }
+
+      match /biker_events/{eventId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(eventId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(eventId) &&
+                         request.auth.uid == userId &&
+                         incoming().creatorId == request.auth.uid &&
+                         incoming().status == 'upcoming' &&
+                         incoming().keys().hasAll([
+                           'creatorId', 'creatorName', 'title', 'eventType', 'locationName',
+                           'scheduledLabel', 'lat', 'lng', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'packId', 'creatorId', 'creatorName', 'title', 'description', 'eventType',
+                           'locationId', 'locationName', 'brewSpecialty', 'scheduledLabel',
+                           'lat', 'lng', 'attendeeUids', 'memberUids', 'isPassportEvent',
+                           'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidBikerEvent(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(eventId) &&
+                         request.auth.uid == userId &&
+                         isValidBikerEvent(incoming()) &&
+                         existing().status != 'completed' &&
+                         incoming().creatorId == existing().creatorId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'description', 'scheduledLabel', 'attendeeUids', 'status', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(eventId) && request.auth.uid == userId;
+      }
+
+      match /garage_bikes/{bikeId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(bikeId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(bikeId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'makeModel', 'year', 'currentOdometerKm', 'isPrimary', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'makeModel', 'year', 'currentOdometerKm',
+                           'engineCc', 'tirePsiFront', 'tirePsiRear', 'isPrimary', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidGarageBike(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(bikeId) &&
+                         request.auth.uid == userId &&
+                         isValidGarageBike(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'makeModel', 'year', 'currentOdometerKm',
+                           'engineCc', 'tirePsiFront', 'tirePsiRear', 'isPrimary', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(bikeId) && request.auth.uid == userId;
+      }
+
+      match /maintenance_items/{itemId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(itemId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(itemId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'bikeId', 'bikeName', 'taskType', 'title',
+                           'intervalKm', 'lastServiceOdometerKm', 'nextDueOdometerKm',
+                           'enabled', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bikeId', 'bikeName', 'taskType', 'title', 'notes',
+                           'intervalKm', 'lastServiceOdometerKm', 'nextDueOdometerKm',
+                           'enabled', 'lastServicedAtMs', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidMaintenanceItem(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(itemId) &&
+                         request.auth.uid == userId &&
+                         isValidMaintenanceItem(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().bikeId == existing().bikeId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'bikeName', 'title', 'notes', 'intervalKm', 'lastServiceOdometerKm',
+                           'nextDueOdometerKm', 'enabled', 'lastServicedAtMs', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(itemId) && request.auth.uid == userId;
+      }
+
+      match /service_logs/{logId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(logId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(logId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'bikeId', 'bikeName', 'taskType', 'title',
+                           'odometerKm', 'performedAtMs', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bikeId', 'bikeName', 'taskType', 'title',
+                           'odometerKm', 'costAmount', 'shopOrDiy', 'notes', 'performedAtMs', 'createdAt'
+                         ]) &&
+                         isValidServiceLog(incoming());
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(logId) && request.auth.uid == userId;
+      }
+    }
+
+    match /pack_invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().keys().hasAll(['packId', 'packName', 'ownerId', 'encryptionSalt', 'createdAt']) &&
+                       incoming().keys().hasOnly(['packId', 'packName', 'ownerId', 'encryptionSalt', 'createdAt']) &&
+                       isValidPackInvite(incoming());
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(inviteCode) && request.auth.uid == existing().ownerId;
+    }
+
+    match /packs/{packId} {
+      allow get: if isSignedIn() && isValidId(packId) && request.auth.uid in existing().memberUids;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(packId) &&
+                       incoming().ownerId == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll([
+                         'name', 'inviteCode', 'ownerId', 'memberUids', 'encryptionSalt', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'name', 'inviteCode', 'ownerId', 'memberUids', 'encryptionSalt',
+                         'separationThresholdKm', 'activeRouteName', 'activeRoutePolyline',
+                         'activeRouteDistanceKm', 'activeRouteDurationMin', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidRidePack(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(packId) &&
+                       isValidRidePack(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().inviteCode == existing().inviteCode &&
+                       incoming().encryptionSalt == existing().encryptionSalt &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action 1: Existing member updates shared route or pack settings
+                         (
+                           request.auth.uid in existing().memberUids &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'separationThresholdKm', 'activeRouteName', 'activeRoutePolyline',
+                             'activeRouteDistanceKm', 'activeRouteDurationMin', 'updatedAt'
+                           ])
+                         ) ||
+                         // Action 2: Authenticated user joins pack via invite
+                         (
+                           !(request.auth.uid in existing().memberUids) &&
+                           request.auth.uid in incoming().memberUids &&
+                           incoming().memberUids.hasAll(existing().memberUids) &&
+                           incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                         ) ||
+                         // Action 3: Existing member leaves pack (non-owner)
+                         (
+                           request.auth.uid in existing().memberUids &&
+                           request.auth.uid != existing().ownerId &&
+                           !(request.auth.uid in incoming().memberUids) &&
+                           existing().memberUids.hasAll(incoming().memberUids) &&
+                           incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(packId) && request.auth.uid == existing().ownerId;
+
+      match /members/{memberUid} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(memberUid) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(memberUid) &&
+                         request.auth.uid == memberUid &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'userId', 'packId', 'displayName', 'encryptedTelemetry',
+                           'batteryPercent', 'isCharging', 'isOnline', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'packId', 'displayName', 'photoUrl', 'bikeModel', 'phoneNumber',
+                           'encryptedTelemetry', 'batteryPercent', 'isCharging', 'totalDistanceKm',
+                           'elevationClimbedM', 'isOnline', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidPackMemberTelemetry(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(memberUid) &&
+                         isValidPackMemberTelemetry(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().packId == existing().packId &&
+                         incoming().createdAt == existing().createdAt && (
+                           // Action 1: Rider updates their own telemetry & syncs memberUids
+                           (
+                             request.auth.uid == memberUid &&
+                             request.auth.uid in incoming().memberUids &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'displayName', 'photoUrl', 'bikeModel', 'phoneNumber',
+                               'encryptedTelemetry', 'batteryPercent', 'isCharging',
+                               'totalDistanceKm', 'elevationClimbedM', 'isOnline', 'memberUids', 'updatedAt'
+                             ])
+                           ) ||
+                           // Action 2: Newly joined pack member adds themselves to memberUids visibility list
+                           (
+                             !(request.auth.uid in existing().memberUids) &&
+                             request.auth.uid in incoming().memberUids &&
+                             incoming().memberUids.hasAll(existing().memberUids) &&
+                             incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                             request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(packId) && isValidId(memberUid) && request.auth.uid == memberUid;
+      }
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(messageId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(messageId) &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'senderId', 'senderName', 'packId', 'encryptedBody', 'messageType', 'memberUids', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'senderId', 'senderName', 'packId', 'recipientId', 'encryptedBody',
+                           'messageType', 'encryptedAudio', 'audioCodec', 'audioDurationMs',
+                           'audioSizeBytes', 'audioPeaks', 'memberUids', 'createdAt'
+                         ]) &&
+                         isValidPackMessage(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(messageId) &&
+                         !(request.auth.uid in existing().memberUids) &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().memberUids.hasAll(existing().memberUids) &&
+                         incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                         isValidPackMessage(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['memberUids']) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow delete: if false;
+      }
+
+      match /pings/{pingId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(pingId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(pingId) &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'senderId', 'senderName', 'targetUserId', 'packId', 'alertType',
+                           'acknowledged', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'senderId', 'senderName', 'targetUserId', 'packId', 'alertType',
+                           'encryptedNote', 'acknowledged', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidUrgentPing(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(pingId) &&
+                         request.auth.uid in existing().memberUids &&
+                         (request.auth.uid == existing().targetUserId || existing().targetUserId == 'ALL') &&
+                         isValidUrgentPing(incoming()) &&
+                         incoming().senderId == existing().senderId &&
+                         incoming().packId == existing().packId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['acknowledged', 'updatedAt']);
+
+        allow delete: if false;
+      }
+
+      match /challenges/{challengeId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(challengeId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(challengeId) &&
+                         incoming().creatorId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         incoming().status == 'active' &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'packId', 'creatorId', 'title', 'challengeType', 'targetValue',
+                           'currentValue', 'unit', 'status', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'packId', 'creatorId', 'title', 'description', 'challengeType',
+                           'targetValue', 'currentValue', 'unit', 'checkpointLat', 'checkpointLng',
+                           'status', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidMapChallenge(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(challengeId) &&
+                         isValidMapChallenge(incoming()) &&
+                         incoming().creatorId == existing().creatorId &&
+                         incoming().packId == existing().packId &&
+                         incoming().createdAt == existing().createdAt && (
+                           (
+                             request.auth.uid in existing().memberUids &&
+                             existing().status != 'completed' &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['currentValue', 'status', 'updatedAt'])
+                           ) ||
+                           (
+                             !(request.auth.uid in existing().memberUids) &&
+                             request.auth.uid in incoming().memberUids &&
+                             incoming().memberUids.hasAll(existing().memberUids) &&
+                             incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                             request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(packId) && isValidId(challengeId) && request.auth.uid == existing().creatorId;
+      }
+
+      match /markers/{markerId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(markerId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(markerId) &&
+                         incoming().creatorId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         incoming().status == 'active' &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'packId', 'creatorId', 'creatorName', 'pinType', 'title',
+                           'lat', 'lng', 'severity', 'status', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'packId', 'creatorId', 'creatorName', 'pinType', 'title', 'description',
+                           'lat', 'lng', 'severity', 'confirmedByUids', 'status', 'memberUids', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidPackMapPin(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(markerId) &&
+                         isValidPackMapPin(incoming()) &&
+                         incoming().creatorId == existing().creatorId &&
+                         incoming().packId == existing().packId &&
+                         incoming().createdAt == existing().createdAt && (
+                           (
+                             request.auth.uid in existing().memberUids &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['confirmedByUids', 'status', 'updatedAt'])
+                           ) ||
+                           (
+                             !(request.auth.uid in existing().memberUids) &&
+                             request.auth.uid in incoming().memberUids &&
+                             incoming().memberUids.hasAll(existing().memberUids) &&
+                             incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                             request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(packId) && isValidId(markerId) && request.auth.uid == existing().creatorId;
+      }
+
+      match /photos/{photoId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(photoId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(photoId) &&
+                         incoming().uploaderId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'packId', 'uploaderId', 'uploaderName', 'imageDataBase64', 'memberUids', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'packId', 'uploaderId', 'uploaderName', 'caption', 'locationLabel',
+                           'imageDataBase64', 'lat', 'lng', 'memberUids', 'createdAt'
+                         ]) &&
+                         isValidPackGalleryPhoto(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(photoId) &&
+                         !(request.auth.uid in existing().memberUids) &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().memberUids.hasAll(existing().memberUids) &&
+                         incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                         isValidPackGalleryPhoto(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['memberUids']) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow delete: if isSignedIn() && isValidId(packId) && isValidId(photoId) && request.auth.uid == existing().uploaderId;
+      }
+
+      match /events/{eventId} {
+        allow get: if isSignedIn() && isValidId(packId) && isValidId(eventId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(eventId) &&
+                         incoming().creatorId == request.auth.uid &&
+                         incoming().packId == packId &&
+                         incoming().status == 'upcoming' &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidMemberList(incoming().memberUids) &&
+                         incoming().keys().hasAll([
+                           'packId', 'creatorId', 'creatorName', 'title', 'eventType', 'locationName',
+                           'scheduledLabel', 'lat', 'lng', 'memberUids', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'packId', 'creatorId', 'creatorName', 'title', 'description', 'eventType',
+                           'locationId', 'locationName', 'brewSpecialty', 'scheduledLabel',
+                           'lat', 'lng', 'attendeeUids', 'memberUids', 'isPassportEvent',
+                           'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidBikerEvent(incoming()) &&
+                         request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(packId) &&
+                         isValidId(eventId) &&
+                         isValidBikerEvent(incoming()) &&
+                         incoming().creatorId == existing().creatorId &&
+                         incoming().packId == existing().packId &&
+                         incoming().createdAt == existing().createdAt && (
+                           (
+                             request.auth.uid in existing().memberUids &&
+                             existing().status != 'completed' &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['attendeeUids', 'status', 'updatedAt'])
+                           ) ||
+                           (
+                             !(request.auth.uid in existing().memberUids) &&
+                             request.auth.uid in incoming().memberUids &&
+                             isValidMemberList(incoming().memberUids) &&
+                             incoming().memberUids.hasAll(existing().memberUids) &&
+                             incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+                             request.auth.uid in get(/databases/$(database)/documents/packs/$(packId)).data.memberUids
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(packId) && isValidId(eventId) && request.auth.uid == existing().creatorId;
+      }
+    }
+  }
+}

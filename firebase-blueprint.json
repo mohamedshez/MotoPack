@@ -1,0 +1,370 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated rider profile and cumulative stats.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Rider display name" },
+        "photoUrl": { "type": "string", "description": "Google profile avatar URL" },
+        "bikeModel": { "type": "string", "description": "Motorcycle make and model" },
+        "phoneNumber": { "type": "string", "description": "Optional rider contact number" },
+        "activePackId": { "type": "string", "description": "Currently active ride pack ID" },
+        "totalDistanceKm": { "type": "number", "description": "Cumulative distance ridden in km" },
+        "totalElevationM": { "type": "number", "description": "Cumulative elevation climbed in meters" },
+        "ridesCompleted": { "type": "integer", "description": "Total completed rides" },
+        "earnedMilestones": { "type": "array", "description": "Unlocked distance and convoy milestone IDs" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "createdAt", "updatedAt"]
+    },
+    "RideTrip": {
+      "title": "RideTrip",
+      "description": "Historical ride log belonging to a rider.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "packId": { "type": "string" },
+        "title": { "type": "string" },
+        "distanceKm": { "type": "number" },
+        "elevationGainM": { "type": "number" },
+        "durationMin": { "type": "integer" },
+        "avgSpeedKmh": { "type": "number" },
+        "startLat": { "type": "number" },
+        "startLng": { "type": "number" },
+        "endLat": { "type": "number" },
+        "endLng": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "distanceKm", "createdAt", "updatedAt"]
+    },
+    "RidePack": {
+      "title": "RidePack",
+      "description": "Motorcycle riding group with shared route and encrypted key salt.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "encryptionSalt": { "type": "string" },
+        "separationThresholdKm": { "type": "number" },
+        "activeRouteName": { "type": "string" },
+        "activeRoutePolyline": { "type": "string" },
+        "activeRouteDistanceKm": { "type": "number" },
+        "activeRouteDurationMin": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "inviteCode", "ownerId", "memberUids", "encryptionSalt", "createdAt", "updatedAt"]
+    },
+    "PackInvite": {
+      "title": "PackInvite",
+      "description": "Invite lookup mapping a 6-character code to a pack ID and encryption salt.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string" },
+        "packName": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "encryptionSalt": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["packId", "packName", "ownerId", "encryptionSalt", "createdAt"]
+    },
+    "PackMemberTelemetry": {
+      "title": "PackMemberTelemetry",
+      "description": "Live rider telemetry with AES-256-GCM encrypted location coordinates and battery state.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "packId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "bikeModel": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "encryptedTelemetry": { "type": "string", "description": "Base64 AES-GCM encrypted lat/lng/speed/heading/altitude" },
+        "batteryPercent": { "type": "integer" },
+        "isCharging": { "type": "boolean" },
+        "totalDistanceKm": { "type": "number" },
+        "elevationClimbedM": { "type": "number" },
+        "isOnline": { "type": "boolean" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "packId", "displayName", "encryptedTelemetry", "batteryPercent", "isCharging", "isOnline", "memberUids", "createdAt", "updatedAt"]
+    },
+    "PackMessage": {
+      "title": "PackMessage",
+      "description": "AES-256-GCM encrypted group or direct rider text or Push-to-Talk voice message.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "packId": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "encryptedBody": { "type": "string" },
+        "messageType": { "type": "string", "enum": ["chat", "alert", "ping", "voice"] },
+        "encryptedAudio": { "type": "string" },
+        "audioCodec": { "type": "string", "enum": ["", "AMR_NB", "AAC_LOW"] },
+        "audioDurationMs": { "type": "integer" },
+        "audioSizeBytes": { "type": "integer" },
+        "audioPeaks": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "packId", "encryptedBody", "messageType", "memberUids", "createdAt"]
+    },
+    "UrgentPing": {
+      "title": "UrgentPing",
+      "description": "Urgent ring/ping or safety alert dispatched between riders in a pack.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "packId": { "type": "string" },
+        "alertType": { "type": "string", "enum": ["RING_URGENT", "WEATHER_HAZARD", "LOW_BATTERY", "SEPARATION", "EMERGENCY_SOS"] },
+        "encryptedNote": { "type": "string" },
+        "acknowledged": { "type": "boolean" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "targetUserId", "packId", "alertType", "acknowledged", "memberUids", "createdAt", "updatedAt"]
+    },
+    "MapChallenge": {
+      "title": "MapChallenge",
+      "description": "Interactive map-based motorcycle challenge shared by the pack.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "challengeType": { "type": "string", "enum": ["ELEVATION", "CONVOY", "SPRINT", "CHECKPOINT"] },
+        "targetValue": { "type": "number" },
+        "currentValue": { "type": "number" },
+        "unit": { "type": "string" },
+        "checkpointLat": { "type": "number" },
+        "checkpointLng": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["packId", "creatorId", "title", "challengeType", "targetValue", "currentValue", "unit", "status", "memberUids", "createdAt", "updatedAt"]
+    },
+    "PackMapPin": {
+      "title": "PackMapPin",
+      "description": "Custom interactive map pin for planned gas stops, rest breaks, and pack-reported road hazards.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "pinType": { "type": "string", "enum": ["GAS_STOP", "REST_BREAK", "HAZARD_WARNING", "EMERGENCY_SOS"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "severity": { "type": "string", "enum": ["INFO", "CAUTION", "DANGER"] },
+        "confirmedByUids": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "resolved"] },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["packId", "creatorId", "creatorName", "pinType", "title", "lat", "lng", "severity", "status", "memberUids", "createdAt", "updatedAt"]
+    },
+    "PackGalleryPhoto": {
+      "title": "PackGalleryPhoto",
+      "description": "Ride photo shared with pack members in the encrypted pack chat and gallery.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "caption": { "type": "string" },
+        "locationLabel": { "type": "string" },
+        "imageDataBase64": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["packId", "uploaderId", "uploaderName", "imageDataBase64", "memberUids", "createdAt"]
+    },
+    "PassportStamp": {
+      "title": "PassportStamp",
+      "description": "Rider check-in stamp for the Biker & Brew Passport seasonal tour.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "locationId": { "type": "string" },
+        "locationName": { "type": "string" },
+        "stampCode": { "type": "string" },
+        "brewNote": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "verifiedGps": { "type": "boolean" },
+        "stampedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "locationId", "locationName", "stampCode", "lat", "lng", "verifiedGps", "stampedAt"]
+    },
+    "BikerEvent": {
+      "title": "BikerEvent",
+      "description": "Community, solo, or pack biker event, bike night, or Biker & Brew meetup.",
+      "type": "object",
+      "properties": {
+        "packId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "eventType": { "type": "string", "enum": ["BIKER_BREW", "BIKE_NIGHT", "RIDE_OUT", "SCENIC_MEET"] },
+        "locationId": { "type": "string" },
+        "locationName": { "type": "string" },
+        "brewSpecialty": { "type": "string" },
+        "scheduledLabel": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "attendeeUids": { "type": "array" },
+        "memberUids": { "type": "array" },
+        "isPassportEvent": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["upcoming", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["creatorId", "creatorName", "title", "eventType", "locationName", "scheduledLabel", "lat", "lng", "status", "createdAt", "updatedAt"]
+    },
+    "GarageBike": {
+      "title": "GarageBike",
+      "description": "Motorcycle owned by the rider with live odometer and tire pressure specs.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "makeModel": { "type": "string" },
+        "year": { "type": "integer" },
+        "currentOdometerKm": { "type": "number" },
+        "engineCc": { "type": "integer" },
+        "tirePsiFront": { "type": "integer" },
+        "tirePsiRear": { "type": "integer" },
+        "isPrimary": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "makeModel", "year", "currentOdometerKm", "isPrimary", "createdAt", "updatedAt"]
+    },
+    "MaintenanceItem": {
+      "title": "MaintenanceItem",
+      "description": "Mileage-based motorcycle maintenance reminder schedule.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bikeId": { "type": "string" },
+        "bikeName": { "type": "string" },
+        "taskType": { "type": "string", "enum": ["OIL_CHANGE", "CHAIN_ADJUST", "BRAKE_PADS", "TIRES", "VALVE_CHECK", "AIR_FILTER", "CUSTOM"] },
+        "title": { "type": "string" },
+        "notes": { "type": "string" },
+        "intervalKm": { "type": "number" },
+        "lastServiceOdometerKm": { "type": "number" },
+        "nextDueOdometerKm": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "lastServicedAtMs": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bikeId", "bikeName", "taskType", "title", "intervalKm", "lastServiceOdometerKm", "nextDueOdometerKm", "enabled", "createdAt", "updatedAt"]
+    },
+    "ServiceLog": {
+      "title": "ServiceLog",
+      "description": "Completed motorcycle maintenance service history entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bikeId": { "type": "string" },
+        "bikeName": { "type": "string" },
+        "taskType": { "type": "string", "enum": ["OIL_CHANGE", "CHAIN_ADJUST", "BRAKE_PADS", "TIRES", "VALVE_CHECK", "AIR_FILTER", "CUSTOM"] },
+        "title": { "type": "string" },
+        "odometerKm": { "type": "number" },
+        "costAmount": { "type": "number" },
+        "shopOrDiy": { "type": "string" },
+        "notes": { "type": "string" },
+        "performedAtMs": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bikeId", "bikeName", "taskType", "title", "odometerKm", "performedAtMs", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private authenticated rider profile and milestone stats."
+    },
+    "/users/{userId}/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/RideTrip" },
+      "description": "Rider personal trip history logs."
+    },
+    "/users/{userId}/passport_stamps/{stampId}": {
+      "schema": { "$ref": "#/entities/PassportStamp" },
+      "description": "Biker & Brew Passport check-in stamps collected by the rider."
+    },
+    "/users/{userId}/biker_events/{eventId}": {
+      "schema": { "$ref": "#/entities/BikerEvent" },
+      "description": "Personal biker events and curated event RSVPs for the rider."
+    },
+    "/users/{userId}/garage_bikes/{bikeId}": {
+      "schema": { "$ref": "#/entities/GarageBike" },
+      "description": "Private motorcycles owned and tracked by the rider."
+    },
+    "/users/{userId}/maintenance_items/{itemId}": {
+      "schema": { "$ref": "#/entities/MaintenanceItem" },
+      "description": "Private mileage-based maintenance schedules for the rider's bikes."
+    },
+    "/users/{userId}/service_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ServiceLog" },
+      "description": "Private completed service history records for the rider's bikes."
+    },
+    "/packs/{packId}": {
+      "schema": { "$ref": "#/entities/RidePack" },
+      "description": "Shared motorcycle riding pack metadata and active route."
+    },
+    "/pack_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/PackInvite" },
+      "description": "Direct lookup table from pack invite code to packId and salt."
+    },
+    "/packs/{packId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/PackMemberTelemetry" },
+      "description": "Real-time encrypted location, battery, and rider stats within a pack."
+    },
+    "/packs/{packId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/PackMessage" },
+      "description": "Encrypted pack and direct rider messages."
+    },
+    "/packs/{packId}/pings/{pingId}": {
+      "schema": { "$ref": "#/entities/UrgentPing" },
+      "description": "Urgent ring alerts and convoy safety notifications."
+    },
+    "/packs/{packId}/challenges/{challengeId}": {
+      "schema": { "$ref": "#/entities/MapChallenge" },
+      "description": "Active map-based pack riding challenges."
+    },
+    "/packs/{packId}/markers/{markerId}": {
+      "schema": { "$ref": "#/entities/PackMapPin" },
+      "description": "Interactive gas stop, rest break, and road hazard map pins shared by pack members."
+    },
+    "/packs/{packId}/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/PackGalleryPhoto" },
+      "description": "Shared ride photos in the pack gallery."
+    },
+    "/packs/{packId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/BikerEvent" },
+      "description": "Biker events and Biker & Brew meetups shared across a riding pack."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "MotoPack",
+  "description": "Real-time motorcycle group riding app with live Google Maps rider radar, encrypted pack tracking, route elevation, fuel stops, weather alerts, and offline caching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
