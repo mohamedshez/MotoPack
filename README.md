@@ -21,7 +21,7 @@ elevation-aware routes, proactive weather alerts, push-to-talk voice and an offl
 ## Contents
 
 - [What it does](#what-it-does)
-- [Screenshot](#screenshot)
+- [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
@@ -52,11 +52,11 @@ elevation-aware routes, proactive weather alerts, push-to-talk voice and an offl
 | **Trip reports** | A trip summary dashboard with a formatted PDF export and a share-to-social caption. |
 | **Guest preview** | Try routes, events, garage and trip reports for 30 minutes without signing in. Pack radar, cloud sync and voice need Google Sign-In. |
 
-## Screenshot
+## Screenshots
 
-<img src="docs/screenshots/guest-preview-summary.png" alt="Guest preview, trip summary tab" width="260" />
-
-*Guest preview, trip summary tab.*
+| Sign-in | Guest preview, trip summary |
+| :---: | :---: |
+| <img src="docs/screenshots/sign-in.png" alt="Sign-in screen" width="260" /> | <img src="docs/screenshots/guest-preview-summary.png" alt="Guest preview, trip summary tab" width="260" /> |
 
 ## Tech stack
 
