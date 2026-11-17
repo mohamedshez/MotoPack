@@ -32,6 +32,7 @@ elevation-aware routes, proactive weather alerts, push-to-talk voice and an offl
 - [Security notes](#security-notes)
 - [Working with AI assistants](#working-with-ai-assistants)
 - [Known gaps](#known-gaps)
+- [Roadmap](ROADMAP.md)
 
 ## What it does
 
@@ -54,9 +55,13 @@ elevation-aware routes, proactive weather alerts, push-to-talk voice and an offl
 
 ## Screenshots
 
-| Sign-in | Guest preview, trip summary |
-| :---: | :---: |
-| <img src="docs/screenshots/sign-in.png" alt="Sign-in screen" width="260" /> | <img src="docs/screenshots/guest-preview-summary.png" alt="Guest preview, trip summary tab" width="260" /> |
+| Sign-in | Route planner | AI scenic routes | Weather shield |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/sign-in.png" alt="Sign-in screen" width="230" /> | <img src="docs/screenshots/route-planner.png" alt="Route planner with Snake Pass route" width="230" /> | <img src="docs/screenshots/ai-scenic-routes.png" alt="AI scenic route suggester" width="230" /> | <img src="docs/screenshots/weather-shield.png" alt="Proactive weather shield and route corridor radar" width="230" /> |
+
+| Events | Garage | Trip summary |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/events.png" alt="Events and Brew Passport" width="230" /> | <img src="docs/screenshots/garage.png" alt="Garage with maintenance reminders" width="230" /> | <img src="docs/screenshots/guest-preview-summary.png" alt="Guest preview, trip summary tab" width="230" /> |
 
 ## Tech stack
 
@@ -324,3 +329,7 @@ Tips for using Claude, ChatGPT or another coding assistant on this repository:
 - The namespace is still the template default, `com.example`.
 - Release builds have minification turned off.
 - The Wi-Fi Direct mesh and mesh VPN are experimental and need real devices to test.
+
+## Roadmap
+
+Planned features and a checklist of everything built so far are in [ROADMAP.md](ROADMAP.md).
